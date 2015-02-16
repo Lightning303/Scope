@@ -38,7 +38,7 @@ ILI9341_due_gText frequencyArea(&tft);
 byte valueBuffer[WIDTH][2];
 byte vMax[2];
 byte vMin[2];
-unsigned long timeMessuCOLOR_ANALOG[2];
+unsigned long timeMessured[2];
 float frequency[2];
 
 // indexes
@@ -108,7 +108,7 @@ void loop()
       }
     }
     
-    timeMessuCOLOR_ANALOG[0] = micros();
+    timeMessured[0] = micros();
   }
   if (valueIndex >= 0 && valueIndex < steps)
   {
@@ -125,7 +125,7 @@ void loop()
   }
   else 
   {  
-    timeMessuCOLOR_ANALOG[0] = micros() - timeMessuCOLOR_ANALOG[0];
+    timeMessured[0] = micros() - timeMessured[0];
     valueIndex = 0;
     updateTFT();
   }
@@ -242,7 +242,7 @@ void updateTFT()
   }
   if (periodPoints[0] != 0 && periodPoints[1] != 0)
   {  
-    frequency[0] = 1 / ((float)timeMessuCOLOR_ANALOG[0] / floor(steps) * (periodPoints[1] - periodPoints[0]) * 0.000001);
+    frequency[0] = 1 / ((float)timeMessured[0] / floor(steps) * (periodPoints[1] - periodPoints[0]) * 0.000001);
   }
   else
   {
@@ -266,11 +266,11 @@ void updateTFT()
     sprintf(tempString, "Vmin: %sV", tempValue);
     vMinArea.drawString(tempString, gTextAlignMiddleLeft, gTextEraseFullLine);
   }
-  if ((timeMessuCOLOR_ANALOG[0] >= 10000 ? timeMessuCOLOR_ANALOG[0] / 100 : timeMessuCOLOR_ANALOG[0]) != (timeMessuCOLOR_ANALOG[1] >= 10000 ? timeMessuCOLOR_ANALOG[1] / 100 : timeMessuCOLOR_ANALOG[1]))
+  if ((timeMessured[0] >= 10000 ? timeMessured[0] / 100 : timeMessured[0]) != (timeMessured[1] >= 10000 ? timeMessured[1] / 100 : timeMessured[1]))
   {
-    timeMessuCOLOR_ANALOG[1] = timeMessuCOLOR_ANALOG[0];
-    ftoa(tempValue, timeMessuCOLOR_ANALOG[0] >= 10000 ? (float)timeMessuCOLOR_ANALOG[0] / 10000 : (float)timeMessuCOLOR_ANALOG[0] / 10, 2);
-    sprintf(tempString, timeMessuCOLOR_ANALOG[0] >= 10000 ? "t/Div: %sms" : "%sus", tempValue);
+    timeMessured[1] = timeMessured[0];
+    ftoa(tempValue, timeMessured[0] >= 10000 ? (float)timeMessured[0] / 10000 : (float)timeMessured[0] / 10, 2);
+    sprintf(tempString, timeMessured[0] >= 10000 ? "t/Div: %sms" : "%sus", tempValue);
     timePerDivArea.drawString(tempString, gTextAlignMiddleLeft, gTextEraseFullLine);
   }
   if (frequency[0] != frequency[1])
