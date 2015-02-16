@@ -5,29 +5,27 @@
 #include <ILI9341_due.h>
 #include "fonts\Verdana18.h"
 
-#define WIDTH 320
-#define HEIGHT 240
-
+// Pins
 #define CS 9
 #define DC 8
 #define RST 7
-
 #define ANALOG 18
 #define DIGITAL 5
-#define DIGITALMODE 2
+#define DIGITAL_MODE 2
 
-#define divSize 32
+// Display
+#define WIDTH 320
+#define HEIGHT 240
 
-// Color definitions
-// redundant!
-#define	BLACK   0x0000
-#define	BLUE    0x001F
-#define	RED     0xF800
-#define	GREEN   0x07E0
-#define CYAN    0x07FF
-#define MAGENTA 0xF81F
-#define YELLOW  0xFFE0  
-#define WHITE   0xFFFF
+// Settings
+#define DIV_SIZE 32
+
+// Colors
+#define COLOR_BG 0x0000
+#define COLOR_TEXT 0xFFFF
+#define COLOR_DIV 0x7BEF
+#define COLOR_ANALOG 0xF800
+#define COLOR_DIGITAL 0x07E0
 
 // ILI9341_due lib init
 ILI9341_due tft = ILI9341_due(CS, DC, RST);
@@ -40,7 +38,7 @@ ILI9341_due_gText frequencyArea(&tft);
 byte valueBuffer[WIDTH][2];
 byte vMax[2];
 byte vMin[2];
-unsigned long timeMessured[2];
+unsigned long timeMessuCOLOR_ANALOG[2];
 float frequency[2];
 
 // indexes
@@ -65,7 +63,7 @@ void setup()
   
   pinMode(ANALOG, INPUT);
   pinMode(DIGITAL, INPUT);
-  pinMode(DIGITALMODE, INPUT);
+  pinMode(DIGITAL_MODE, INPUT);
   
   // temp? signal output (pwm 50%)
   pinMode(3, OUTPUT);
@@ -82,7 +80,7 @@ void loop()
 {
   if (valueIndex == 0)
   {
-    digitalMode = digitalRead(DIGITALMODE) == HIGH ? true : false;
+    digitalMode = digitalRead(DIGITAL_MODE) == HIGH ? true : false;
  
     if (bufferIndex == 0)
     {
@@ -110,24 +108,24 @@ void loop()
       }
     }
     
-    timeMessured[0] = micros();
+    timeMessuCOLOR_ANALOG[0] = micros();
   }
   if (valueIndex >= 0 && valueIndex < steps)
   {
     if (digitalMode)
     {
-      valueBuffer[valueIndex][bufferIndex] = digitalRead(DIGITAL) == HIGH ? 0 : 6 * divSize;
+      valueBuffer[valueIndex][bufferIndex] = digitalRead(DIGITAL) == HIGH ? 0 : 6 * DIV_SIZE;
       delayMicroseconds(digitalDelay);
     }
     else
     {
-      valueBuffer[valueIndex][bufferIndex] = (6 * divSize) - ((float)analogRead(ANALOG) / 1024 * 6 * divSize);
+      valueBuffer[valueIndex][bufferIndex] = (6 * DIV_SIZE) - ((float)analogRead(ANALOG) / 1024 * 6 * DIV_SIZE);
     }
     valueIndex++;
   }
   else 
   {  
-    timeMessured[0] = micros() - timeMessured[0];
+    timeMessuCOLOR_ANALOG[0] = micros() - timeMessuCOLOR_ANALOG[0];
     valueIndex = 0;
     updateTFT();
   }
@@ -137,87 +135,94 @@ void setupTFT()
 {
   tft.begin();
   tft.setRotation(iliRotation270);
-  tft.fillScreen(BLACK);
-  
-  vMaxArea.defineArea(8, (6 * divSize) + 6, WIDTH / 2, (6 * divSize) + ((HEIGHT - (6 * divSize)) / 2));
+
+  vMaxArea.defineArea(8, (6 * DIV_SIZE) + 6, WIDTH / 2, (6 * DIV_SIZE) + ((HEIGHT - (6 * DIV_SIZE)) / 2));
   vMaxArea.selectFont(Verdana18);
   vMaxArea.setFontLetterSpacing(2);
-  vMaxArea.setFontColor(WHITE, BLACK);
+  vMaxArea.setFontColor(COLOR_TEXT, COLOR_BG);
   
-  vMinArea.defineArea(8, (6 * divSize) + ((HEIGHT - (6 * divSize)) / 2), WIDTH / 2, HEIGHT);
+  vMinArea.defineArea(8, (6 * DIV_SIZE) + ((HEIGHT - (6 * DIV_SIZE)) / 2), WIDTH / 2, HEIGHT);
   vMinArea.selectFont(Verdana18);
   vMinArea.setFontLetterSpacing(2);
-  vMinArea.setFontColor(WHITE, BLACK);
+  vMinArea.setFontColor(COLOR_TEXT, COLOR_BG);
   
-  timePerDivArea.defineArea(WIDTH / 2, (6 * divSize) + 6, WIDTH, (6 * divSize) + ((HEIGHT - (6 * divSize)) / 2));
+  timePerDivArea.defineArea(WIDTH / 2, (6 * DIV_SIZE) + 6, WIDTH, (6 * DIV_SIZE) + ((HEIGHT - (6 * DIV_SIZE)) / 2));
   timePerDivArea.selectFont(Verdana18);
   timePerDivArea.setFontLetterSpacing(2);
-  timePerDivArea.setFontColor(WHITE, BLACK);
+  timePerDivArea.setFontColor(COLOR_TEXT, COLOR_BG);
   
-  frequencyArea.defineArea(WIDTH / 2, (6 * divSize) + ((HEIGHT - (6 * divSize)) / 2), WIDTH, HEIGHT);
+  frequencyArea.defineArea(WIDTH / 2, (6 * DIV_SIZE) + ((HEIGHT - (6 * DIV_SIZE)) / 2), WIDTH, HEIGHT);
   frequencyArea.selectFont(Verdana18);
   frequencyArea.setFontLetterSpacing(2);
-  frequencyArea.setFontColor(WHITE, BLACK);
+  frequencyArea.setFontColor(COLOR_TEXT, COLOR_BG);
 
-  drawGUI();
+  resetTFT();
 }
 
-void drawGUI()
+void resetTFT()
 {
+  tft.fillScreen(COLOR_BG);
   for (byte i = 1; i < 10; i++)
   {
-    tft.drawFastVLine(i * divSize, 0, 6 * divSize, WHITE);
+    tft.drawFastVLine(i * DIV_SIZE, 0, 6 * DIV_SIZE, COLOR_DIV);
   }
   for (byte i = 1; i <= 6; i++)
   {
-    tft.drawFastHLine(0, i * divSize, WIDTH, WHITE);
+    tft.drawFastHLine(0, i * DIV_SIZE, WIDTH, COLOR_DIV);
   }
 }
 
 void updateTFT()
 {
-  if (fillScreen)
-  {
-    //tft.fillRect(0, 0, WIDTH, (6 * divSize) + 2, BLACK);
-  }
-  else
-  {
-    //removeGraph();
-  }
-  drawGUI();
-  
-  unsigned long stopwatch = millis();
   float stepSize = (float)WIDTH / (steps - 1);
 
-  for (int i = 1; i < (int)steps; i++)
+  for (int x = 1; x < (int)steps; x++)
   {
-    // temp playing around with continious waves
-    tft.drawLine((i * stepSize) - stepSize, valueBuffer[i - 1][bufferIndex == 0 ? 1 : 0] - 1, i == floor(steps - 1) ? WIDTH : i * stepSize, valueBuffer[i][bufferIndex == 0 ? 1 : 0] - 1, BLACK);
-    tft.drawLine((i * stepSize) - stepSize, valueBuffer[i - 1][bufferIndex == 0 ? 1 : 0], i == floor(steps - 1) ? WIDTH : i * stepSize, valueBuffer[i][bufferIndex == 0 ? 1 : 0], BLACK);
-    tft.drawLine((i * stepSize) - stepSize, valueBuffer[i - 1][bufferIndex == 0 ? 1 : 0] + 1, i == floor(steps - 1) ? WIDTH : i * stepSize, valueBuffer[i][bufferIndex == 0 ? 1 : 0] + 1, BLACK);
+    // Remove old graph
+    tft.drawLine((x * stepSize) - stepSize, valueBuffer[x - 1][bufferIndex == 0 ? 1 : 0] - 1, x == floor(steps - 1) ? WIDTH : x * stepSize, valueBuffer[x][bufferIndex == 0 ? 1 : 0] - 1, COLOR_BG);
+    tft.drawLine((x * stepSize) - stepSize, valueBuffer[x - 1][bufferIndex == 0 ? 1 : 0], x == floor(steps - 1) ? WIDTH : x * stepSize, valueBuffer[x][bufferIndex == 0 ? 1 : 0], COLOR_BG);
+    tft.drawLine((x * stepSize) - stepSize, valueBuffer[x - 1][bufferIndex == 0 ? 1 : 0] + 1, x == floor(steps - 1) ? WIDTH : x * stepSize, valueBuffer[x][bufferIndex == 0 ? 1 : 0] + 1, COLOR_BG);
     
-    tft.drawLine((i * stepSize) - stepSize, valueBuffer[i - 1][bufferIndex] - 1, i == floor(steps - 1) ? WIDTH : i * stepSize, valueBuffer[i][bufferIndex] - 1, digitalMode ? GREEN : RED);
-    tft.drawLine((i * stepSize) - stepSize, valueBuffer[i - 1][bufferIndex], i == floor(steps - 1) ? WIDTH : i * stepSize, valueBuffer[i][bufferIndex], digitalMode ? GREEN : RED);
-    tft.drawLine((i * stepSize) - stepSize, valueBuffer[i - 1][bufferIndex] + 1, i == floor(steps - 1) ? WIDTH : i * stepSize, valueBuffer[i][bufferIndex] + 1, digitalMode ? GREEN : RED);
+    // Draw vertical division line dynamically
+    for (int i = (x * stepSize) - stepSize; i < x * stepSize; i++)
+    {
+      if (i % DIV_SIZE == 0 && i != 0)
+      {
+        byte s = max(0, min(valueBuffer[x - 1][bufferIndex == 0 ? 1 : 0], valueBuffer[x][bufferIndex == 0 ? 1 : 0]) - 1);
+        byte h = abs(valueBuffer[x - 1][bufferIndex == 0 ? 1 : 0] - valueBuffer[x][bufferIndex == 0 ? 1 : 0]) + 3;
+        if (s + h > 6 * DIV_SIZE)
+        {
+          h -= s + h - (6 * DIV_SIZE);
+        }
+        tft.drawFastVLine(i, s, h, COLOR_DIV);
+      }
+    }
+    
+    // Draw horizontal division lines dynamically
+    byte s = min(valueBuffer[x - 1][bufferIndex == 0 ? 1 : 0], valueBuffer[x][bufferIndex == 0 ? 1 : 0]);
+    byte d = abs(valueBuffer[x - 1][bufferIndex == 0 ? 1 : 0] - valueBuffer[x][bufferIndex == 0 ? 1 : 0]);
+    for (int i = s - 1; i < s + d + 3; i++)
+    {
+      if (i % DIV_SIZE == 0 && i != 0)
+      {
+        tft.drawFastHLine((x * stepSize) - stepSize - 1, i, stepSize + 3, COLOR_DIV);
+      }
+    }
+    
+    // Draw new graph
+    tft.drawLine((x * stepSize) - stepSize, valueBuffer[x - 1][bufferIndex] - 1, x == floor(steps - 1) ? WIDTH : x * stepSize, valueBuffer[x][bufferIndex] - 1, digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
+    tft.drawLine((x * stepSize) - stepSize, valueBuffer[x - 1][bufferIndex], x == floor(steps - 1) ? WIDTH : x * stepSize, valueBuffer[x][bufferIndex], digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
+    tft.drawLine((x * stepSize) - stepSize, valueBuffer[x - 1][bufferIndex] + 1, x == floor(steps - 1) ? WIDTH : x * stepSize, valueBuffer[x][bufferIndex] + 1, digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
     
     // Messurements
-    if (valueBuffer[i][bufferIndex] < vMax[0])
+    if (valueBuffer[x][bufferIndex] < vMax[0])
     {
-      vMax[0] = valueBuffer[i][bufferIndex];
+      vMax[0] = valueBuffer[x][bufferIndex];
     }
-    if (valueBuffer[i][bufferIndex] > vMin[0])
+    if (valueBuffer[x][bufferIndex] > vMin[0])
     {
-      vMin[0] = valueBuffer[i][bufferIndex];
+      vMin[0] = valueBuffer[x][bufferIndex];
     }
-  }
-  // time it takes fillRect to clear graph
-  if (millis() - stopwatch > 208)
-  {
-    fillScreen = true;
-  }
-  else
-  {
-    fillScreen = false;
   }
   
   byte midValue = (vMax[0] + vMin[0]) / 2;
@@ -237,7 +242,7 @@ void updateTFT()
   }
   if (periodPoints[0] != 0 && periodPoints[1] != 0)
   {  
-    frequency[0] = 1 / ((float)timeMessured[0] / floor(steps) * (periodPoints[1] - periodPoints[0]) * 0.000001);
+    frequency[0] = 1 / ((float)timeMessuCOLOR_ANALOG[0] / floor(steps) * (periodPoints[1] - periodPoints[0]) * 0.000001);
   }
   else
   {
@@ -250,22 +255,22 @@ void updateTFT()
   if (vMax[0] != vMax[1])
   {
     vMax[1] = vMax[0];
-    ftoa(tempValue, (float)((6 * divSize) - vMax[0]) / (6 * divSize) * 5, 2);
+    ftoa(tempValue, (float)((6 * DIV_SIZE) - vMax[0]) / (6 * DIV_SIZE) * 5, 2);
     sprintf(tempString, "Vmax: %sV", tempValue);
     vMaxArea.drawString(tempString, gTextAlignMiddleLeft, gTextEraseFullLine);
   }
   if (vMin[0] != vMin[1])
   {
     vMin[1] = vMin[0];
-    ftoa(tempValue, (float)((6 * divSize) - vMin[0]) / (6 * divSize) * 5, 2);
+    ftoa(tempValue, (float)((6 * DIV_SIZE) - vMin[0]) / (6 * DIV_SIZE) * 5, 2);
     sprintf(tempString, "Vmin: %sV", tempValue);
     vMinArea.drawString(tempString, gTextAlignMiddleLeft, gTextEraseFullLine);
   }
-  if ((timeMessured[0] >= 10000 ? timeMessured[0] / 100 : timeMessured[0]) != (timeMessured[1] >= 10000 ? timeMessured[1] / 100 : timeMessured[1]))
+  if ((timeMessuCOLOR_ANALOG[0] >= 10000 ? timeMessuCOLOR_ANALOG[0] / 100 : timeMessuCOLOR_ANALOG[0]) != (timeMessuCOLOR_ANALOG[1] >= 10000 ? timeMessuCOLOR_ANALOG[1] / 100 : timeMessuCOLOR_ANALOG[1]))
   {
-    timeMessured[1] = timeMessured[0];
-    ftoa(tempValue, timeMessured[0] >= 10000 ? (float)timeMessured[0] / 10000 : (float)timeMessured[0] / 10, 2);
-    sprintf(tempString, timeMessured[0] >= 10000 ? "dt: %sms/Div" : "%sus/Div", tempValue);
+    timeMessuCOLOR_ANALOG[1] = timeMessuCOLOR_ANALOG[0];
+    ftoa(tempValue, timeMessuCOLOR_ANALOG[0] >= 10000 ? (float)timeMessuCOLOR_ANALOG[0] / 10000 : (float)timeMessuCOLOR_ANALOG[0] / 10, 2);
+    sprintf(tempString, timeMessuCOLOR_ANALOG[0] >= 10000 ? "t/Div: %sms" : "%sus", tempValue);
     timePerDivArea.drawString(tempString, gTextAlignMiddleLeft, gTextEraseFullLine);
   }
   if (frequency[0] != frequency[1])
@@ -273,19 +278,6 @@ void updateTFT()
     frequency[1] = frequency[0];
     sprintf(tempString, "f: %dHz", (int)frequency[0]);
     frequencyArea.drawString(tempString, gTextAlignMiddleLeft, gTextEraseFullLine);
-  }
-  
-  delay(1);
-}
-
-void removeGraph()
-{
-  float stepSize = (float)WIDTH / (steps - 1);
-  for (int i = 1; i < (int)steps; i++)
-  {
-    tft.drawLine((i * stepSize) - stepSize, valueBuffer[i - 1][bufferIndex == 0 ? 1 : 0] - 1, i == floor(steps - 1) ? WIDTH : i * stepSize, valueBuffer[i][bufferIndex == 0 ? 1 : 0] - 1, BLACK);
-    tft.drawLine((i * stepSize) - stepSize, valueBuffer[i - 1][bufferIndex == 0 ? 1 : 0], i == floor(steps - 1) ? WIDTH : i * stepSize, valueBuffer[i][bufferIndex == 0 ? 1 : 0], BLACK);
-    tft.drawLine((i * stepSize) - stepSize, valueBuffer[i - 1][bufferIndex == 0 ? 1 : 0] + 1, i == floor(steps - 1) ? WIDTH : i * stepSize, valueBuffer[i][bufferIndex == 0 ? 1 : 0] + 1, BLACK);
   }
 }
 
