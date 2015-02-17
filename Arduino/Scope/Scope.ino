@@ -48,7 +48,7 @@ byte bufferIndex = 0;
 boolean fillScreen = false;
 boolean digitalMode = true;
 int digitalDelay;
-float steps;
+float steps[2];
 
 // temp
 int poti = 0;
@@ -81,7 +81,14 @@ void loop()
   if (valueIndex == 0)
   {
     digitalMode = digitalRead(DIGITAL_MODE) == HIGH ? true : false;
- 
+    
+    // temp time poti sweep
+    poti += 10;
+    if (poti > 1023)
+    {
+      poti = 0;
+    }
+    
     if (bufferIndex == 0)
     {
       bufferIndex = 1;
@@ -96,21 +103,21 @@ void loop()
     
     if (digitalMode)
     {
-      steps = WIDTH;
+      steps[bufferIndex] = WIDTH;
       digitalDelay = (1024 - poti) / 8;
     }
     else
     {
-      steps = (float)(1024 - poti) / 1024 * WIDTH;
-      if (steps < 2)
+      steps[bufferIndex] = (float)(1024 - poti) / 1024 * WIDTH;
+      if (steps[bufferIndex] < 2)
       {
-        steps = 2;
+        steps[bufferIndex] = 2;
       }
     }
     
     timeMessured[0] = micros();
   }
-  if (valueIndex >= 0 && valueIndex < steps)
+  if (valueIndex >= 0 && valueIndex < steps[bufferIndex])
   {
     if (digitalMode)
     {
@@ -174,61 +181,70 @@ void resetTFT()
 
 void updateTFT()
 {
-  float stepSize = (float)WIDTH / (steps - 1);
-
-  for (int x = 1; x < (int)steps; x++)
+  float stepSize[2];
+  stepSize[bufferIndex] = (float)WIDTH / (steps[bufferIndex] - 1);
+  stepSize[bufferIndex == 0 ? 1 : 0] = (float)WIDTH / (steps[bufferIndex == 0 ? 1 : 0] - 1);
+  int x2 = 1;
+  for (int x1 = 1; x1 <= (int)max(steps[0], steps[1]); x1++)
   {
-    // Remove old graph
-    tft.drawLine((x * stepSize) - stepSize, valueBuffer[x - 1][bufferIndex == 0 ? 1 : 0] - 1, x == floor(steps - 1) ? WIDTH : x * stepSize, valueBuffer[x][bufferIndex == 0 ? 1 : 0] - 1, COLOR_BG);
-    tft.drawLine((x * stepSize) - stepSize, valueBuffer[x - 1][bufferIndex == 0 ? 1 : 0], x == floor(steps - 1) ? WIDTH : x * stepSize, valueBuffer[x][bufferIndex == 0 ? 1 : 0], COLOR_BG);
-    tft.drawLine((x * stepSize) - stepSize, valueBuffer[x - 1][bufferIndex == 0 ? 1 : 0] + 1, x == floor(steps - 1) ? WIDTH : x * stepSize, valueBuffer[x][bufferIndex == 0 ? 1 : 0] + 1, COLOR_BG);
-    
-    // Draw vertical division line dynamically
-    for (int i = (x * stepSize) - stepSize; i < x * stepSize; i++)
+    if (x1 < steps[bufferIndex == 0 ? 1 : 0])
     {
-      if (i % DIV_SIZE == 0 && i != 0)
+      // Remove old graph
+      tft.drawLine((x1 * stepSize[bufferIndex == 0 ? 1 : 0]) - stepSize[bufferIndex == 0 ? 1 : 0], valueBuffer[x1 - 1][bufferIndex == 0 ? 1 : 0] - 1, x1 == floor(steps[bufferIndex == 0 ? 1 : 0] - 1) ? WIDTH : x1 * stepSize[bufferIndex == 0 ? 1 : 0], valueBuffer[x1][bufferIndex == 0 ? 1 : 0] - 1, COLOR_BG);
+      tft.drawLine((x1 * stepSize[bufferIndex == 0 ? 1 : 0]) - stepSize[bufferIndex == 0 ? 1 : 0], valueBuffer[x1 - 1][bufferIndex == 0 ? 1 : 0], x1 == floor(steps[bufferIndex == 0 ? 1 : 0] - 1) ? WIDTH : x1 * stepSize[bufferIndex == 0 ? 1 : 0], valueBuffer[x1][bufferIndex == 0 ? 1 : 0], COLOR_BG);
+      tft.drawLine((x1 * stepSize[bufferIndex == 0 ? 1 : 0]) - stepSize[bufferIndex == 0 ? 1 : 0], valueBuffer[x1 - 1][bufferIndex == 0 ? 1 : 0] + 1, x1 == floor(steps[bufferIndex == 0 ? 1 : 0] - 1) ? WIDTH : x1 * stepSize[bufferIndex == 0 ? 1 : 0], valueBuffer[x1][bufferIndex == 0 ? 1 : 0] + 1, COLOR_BG);
+      
+      // Draw vertical division line dynamically
+      for (int i = (x1 * stepSize[bufferIndex == 0 ? 1 : 0]) - stepSize[bufferIndex == 0 ? 1 : 0]; i < x1 * stepSize[bufferIndex == 0 ? 1 : 0]; i++)
       {
-        byte s = max(0, min(valueBuffer[x - 1][bufferIndex == 0 ? 1 : 0], valueBuffer[x][bufferIndex == 0 ? 1 : 0]) - 1);
-        byte h = abs(valueBuffer[x - 1][bufferIndex == 0 ? 1 : 0] - valueBuffer[x][bufferIndex == 0 ? 1 : 0]) + 3;
-        if (s + h > 6 * DIV_SIZE)
+        if (i % DIV_SIZE == 0 && i != 0)
         {
-          h -= s + h - (6 * DIV_SIZE);
+          byte s = max(0, min(valueBuffer[x1 - 1][bufferIndex == 0 ? 1 : 0], valueBuffer[x1][bufferIndex == 0 ? 1 : 0]) - 1);
+          byte h = abs(valueBuffer[x1 - 1][bufferIndex == 0 ? 1 : 0] - valueBuffer[x1][bufferIndex == 0 ? 1 : 0]) + 3;
+          if (s + h > 6 * DIV_SIZE)
+          {
+            h -= s + h - (6 * DIV_SIZE);
+          }
+          tft.drawFastVLine(i, s, h, COLOR_DIV);
         }
-        tft.drawFastVLine(i, s, h, COLOR_DIV);
       }
-    }
-    
-    // Draw horizontal division lines dynamically
-    byte s = min(valueBuffer[x - 1][bufferIndex == 0 ? 1 : 0], valueBuffer[x][bufferIndex == 0 ? 1 : 0]);
-    byte d = abs(valueBuffer[x - 1][bufferIndex == 0 ? 1 : 0] - valueBuffer[x][bufferIndex == 0 ? 1 : 0]);
-    for (int i = s - 1; i < s + d + 3; i++)
-    {
-      if (i % DIV_SIZE == 0 && i != 0)
+      
+      // Draw horizontal division lines dynamically
+      byte s = min(valueBuffer[x1 - 1][bufferIndex == 0 ? 1 : 0], valueBuffer[x1][bufferIndex == 0 ? 1 : 0]);
+      byte d = abs(valueBuffer[x1 - 1][bufferIndex == 0 ? 1 : 0] - valueBuffer[x1][bufferIndex == 0 ? 1 : 0]);
+      for (int i = s - 1; i < s + d + 3; i++)
       {
-        tft.drawFastHLine((x * stepSize) - stepSize - 1, i, stepSize + 3, COLOR_DIV);
+        if (i % DIV_SIZE == 0 && i != 0)
+        {
+          tft.drawFastHLine((x1 * stepSize[bufferIndex == 0 ? 1 : 0]) - stepSize[bufferIndex == 0 ? 1 : 0] - 1, i, stepSize[bufferIndex == 0 ? 1 : 0] + 3, COLOR_DIV);
+        }
       }
     }
-    
-    // Draw new graph
-    tft.drawLine((x * stepSize) - stepSize, valueBuffer[x - 1][bufferIndex] - 1, x == floor(steps - 1) ? WIDTH : x * stepSize, valueBuffer[x][bufferIndex] - 1, digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
-    tft.drawLine((x * stepSize) - stepSize, valueBuffer[x - 1][bufferIndex], x == floor(steps - 1) ? WIDTH : x * stepSize, valueBuffer[x][bufferIndex], digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
-    tft.drawLine((x * stepSize) - stepSize, valueBuffer[x - 1][bufferIndex] + 1, x == floor(steps - 1) ? WIDTH : x * stepSize, valueBuffer[x][bufferIndex] + 1, digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
-    
-    // Messurements
-    if (valueBuffer[x][bufferIndex] < vMax[0])
+
+    if ((stepSize[bufferIndex] <= stepSize[bufferIndex == 0 ? 1 : 0] || (int)(x2 * stepSize[bufferIndex]) < (int)(x1 * stepSize[bufferIndex == 0 ? 1 : 0])) && x2 < (int)steps[bufferIndex])
     {
-      vMax[0] = valueBuffer[x][bufferIndex];
-    }
-    if (valueBuffer[x][bufferIndex] > vMin[0])
-    {
-      vMin[0] = valueBuffer[x][bufferIndex];
+      // Draw new graph
+      tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], valueBuffer[x2 - 1][bufferIndex] - 1, x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], valueBuffer[x2][bufferIndex] - 1, digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
+      tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], valueBuffer[x2 - 1][bufferIndex], x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], valueBuffer[x2][bufferIndex], digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
+      tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], valueBuffer[x2 - 1][bufferIndex] + 1, x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], valueBuffer[x2][bufferIndex] + 1, digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
+      
+      // Messurements
+      if (valueBuffer[x2][bufferIndex] < vMax[0])
+      {
+        vMax[0] = valueBuffer[x2][bufferIndex];
+      }
+      if (valueBuffer[x2][bufferIndex] > vMin[0])
+      {
+        vMin[0] = valueBuffer[x2][bufferIndex];
+      }
+      x2++;
     }
   }
-  
+
   byte midValue = (vMax[0] + vMin[0]) / 2;
   int periodPoints[2] = { 0, 0 };
   
-  for (int i = 1; i < (int)steps; i++)
+  for (int i = 1; i < (int)steps[bufferIndex]; i++)
   {
     if (periodPoints[0] == 0 && valueBuffer[i - 1][bufferIndex] < midValue && valueBuffer[i][bufferIndex] >= midValue)
     {
@@ -242,7 +258,7 @@ void updateTFT()
   }
   if (periodPoints[0] != 0 && periodPoints[1] != 0)
   {  
-    frequency[0] = 1 / ((float)timeMessured[0] / floor(steps) * (periodPoints[1] - periodPoints[0]) * 0.000001);
+    frequency[0] = 1 / ((float)timeMessured[0] / floor(steps[bufferIndex]) * (periodPoints[1] - periodPoints[0]) * 0.000001);
   }
   else
   {
