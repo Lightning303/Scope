@@ -51,8 +51,11 @@ int digitalDelay;
 float steps[2];
 
 // temp
-int poti = 0;
-int triggerLevel = 512;
+int timeAxis = 0;
+byte triggerLevel = 172;
+bool triggerEnabled = true;
+bool triggerMode = true; // true = raising edge, false = falling edge
+bool triggered = false;
 
 void setup()
 {
@@ -80,41 +83,39 @@ void loop()
 {
   if (valueIndex == 0)
   {
+    // Digital Inputs (Switches)
     digitalMode = digitalRead(DIGITAL_MODE) == HIGH ? true : false;
+    //triggerEnabled = digitalRead(TRIGGER_ENABLED) == HIGH ? true : false;
+    //triggerMode = digitalRead(TRIGGER_MODE) == HIGH ? true : false;
     
-    // temp time poti sweep
-    poti += 10;
-    if (poti > 1023)
-    {
-      poti = 0;
-    }
+    // Analog Inputs (Potentiometers)
+    //timeAxis = analogRead(TIME_AXIS);
+    //triggerLevel = (6 * DIV_SIZE) - ((float)analogRead(TRIGGER_LEVEL) / 1024 * 6 * DIV_SIZE);
     
-    if (bufferIndex == 0)
-    {
-      bufferIndex = 1;
-    }
-    else
-    {
-      bufferIndex = 0;
-    }
+    // Switch buffer
+    bufferIndex = bufferIndex == 0 ? 1 : 0;
     
-    vMax[0] = 255;
-    vMin[0] = 0;
-    
+    // Calculate the time axis
     if (digitalMode)
     {
       steps[bufferIndex] = WIDTH;
-      digitalDelay = (1024 - poti) / 8;
+      digitalDelay = (1024 - timeAxis) / 8;
     }
     else
     {
-      steps[bufferIndex] = (float)(1024 - poti) / 1024 * WIDTH;
+      steps[bufferIndex] = (float)(1024 - timeAxis) / 1024 * WIDTH;
       if (steps[bufferIndex] < 2)
       {
         steps[bufferIndex] = 2;
       }
     }
     
+    // Reset trigger
+    triggered = false;
+    
+    // Reset messurement values
+    vMax[0] = 255;
+    vMin[0] = 0;
     timeMessured[0] = micros();
   }
   if (valueIndex >= 0 && valueIndex < steps[bufferIndex])
@@ -127,6 +128,17 @@ void loop()
     else
     {
       valueBuffer[valueIndex][bufferIndex] = (6 * DIV_SIZE) - ((float)analogRead(ANALOG) / 1024 * 6 * DIV_SIZE);
+      if ((triggerEnabled && !triggered && valueIndex > 0) && ((triggerMode && valueBuffer[valueIndex - 1][bufferIndex] > triggerLevel && valueBuffer[valueIndex][bufferIndex] <= triggerLevel) || !triggerMode && valueBuffer[valueIndex - 1][bufferIndex] < triggerLevel && valueBuffer[valueIndex][bufferIndex] >= triggerLevel))
+      {
+        // We triggered!
+        // Use current value as first value
+        valueBuffer[0][bufferIndex] = valueBuffer[valueIndex][bufferIndex];
+        // Reset some vars
+        valueIndex = 0;
+        timeMessured[0] = micros();
+        // Making sure this runthrough wont get triggered again
+        triggered = true;
+      }
     }
     valueIndex++;
   }
@@ -256,6 +268,7 @@ void updateTFT()
       break;
     }
   }
+
   if (periodPoints[0] != 0 && periodPoints[1] != 0)
   {  
     frequency[0] = 1 / ((float)timeMessured[0] / floor(steps[bufferIndex]) * (periodPoints[1] - periodPoints[0]) * 0.000001);
