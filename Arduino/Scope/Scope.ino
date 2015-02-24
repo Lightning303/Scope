@@ -72,6 +72,11 @@ void setup()
   pinMode(3, OUTPUT);
   analogWrite(3, 128);
   
+  // Boost ADC conversion time from 9.6kS/s vs. 76.9kS/s (without overhead)
+  bitClear(ADCSRA,ADPS0); 
+  bitSet(ADCSRA,ADPS1); 
+  bitClear(ADCSRA,ADPS2);
+  
   setupTFT();
   
   vMax[1] = 255;
@@ -126,8 +131,9 @@ void loop()
       delayMicroseconds(digitalDelay);
     }
     else
-    {
-      valueBuffer[valueIndex][bufferIndex] = (6 * DIV_SIZE) - ((float)analogRead(ANALOG) / 1024 * 6 * DIV_SIZE);
+    {     
+      valueBuffer[valueIndex][bufferIndex] = (6 * DIV_SIZE) - ((unsigned long)analogRead(ANALOG) * 6 * DIV_SIZE / 1024);
+
       if ((triggerEnabled && !triggered && valueIndex > 0) && ((triggerMode && valueBuffer[valueIndex - 1][bufferIndex] > triggerLevel && valueBuffer[valueIndex][bufferIndex] <= triggerLevel) || !triggerMode && valueBuffer[valueIndex - 1][bufferIndex] < triggerLevel && valueBuffer[valueIndex][bufferIndex] >= triggerLevel))
       {
         // We triggered!
@@ -236,9 +242,9 @@ void updateTFT()
     if ((stepSize[bufferIndex] <= stepSize[bufferIndex == 0 ? 1 : 0] || (int)(x2 * stepSize[bufferIndex]) < (int)(x1 * stepSize[bufferIndex == 0 ? 1 : 0])) && x2 < (int)steps[bufferIndex])
     {
       // Draw new graph
-      tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], valueBuffer[x2 - 1][bufferIndex] - 1, x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], valueBuffer[x2][bufferIndex] - 1, digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
+      tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], max(valueBuffer[x2 - 1][bufferIndex] - 1, 0), x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], max(valueBuffer[x2][bufferIndex] - 1, 0), digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
       tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], valueBuffer[x2 - 1][bufferIndex], x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], valueBuffer[x2][bufferIndex], digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
-      tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], valueBuffer[x2 - 1][bufferIndex] + 1, x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], valueBuffer[x2][bufferIndex] + 1, digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
+      tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], min(valueBuffer[x2 - 1][bufferIndex] + 1, 6 * DIV_SIZE), x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], min(valueBuffer[x2][bufferIndex] + 1, 6 * DIV_SIZE), digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
       
       // Messurements
       if (valueBuffer[x2][bufferIndex] < vMax[0])
