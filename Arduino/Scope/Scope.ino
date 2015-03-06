@@ -4,14 +4,16 @@
 #include <ILI9341_due_gText.h>
 #include <ILI9341_due.h>
 #include "fonts\Verdana18.h"
+#include "floatToString.h"
 
 // Pins
-#define CS 9
-#define DC 8
-#define RST 7
-#define ANALOG 18
-#define DIGITAL 5
-#define DIGITAL_MODE 2
+#define CS 8
+#define DC 10
+#define RST 9
+#define ANALOG 14
+#define DIGITAL 6
+#define DIGITAL_MODE 7
+#define PWM_SIGNAL 3
 
 // Display
 #define WIDTH 320
@@ -40,15 +42,14 @@ byte vMax[2];
 byte vMin[2];
 unsigned long timeMessured[2];
 float frequency[2];
+float steps[2];
 
 // indexes
 int valueIndex = 0;
 byte bufferIndex = 0;
 
-boolean fillScreen = false;
 boolean digitalMode = true;
 int digitalDelay;
-float steps[2];
 
 // temp
 int timeAxis = 0;
@@ -61,17 +62,14 @@ void setup()
 {
   // sanity check
   delay(5000);
-  
+    
   Serial.begin(115200);
   
   pinMode(ANALOG, INPUT);
   pinMode(DIGITAL, INPUT);
   pinMode(DIGITAL_MODE, INPUT);
-  
-  // temp? signal output (pwm 50%)
-  pinMode(3, OUTPUT);
-  analogWrite(3, 128);
-  
+  pinMode(PWM_SIGNAL, OUTPUT);
+    
   // Boost ADC conversion time from 9.6kS/s vs. 76.9kS/s (without overhead)
   bitClear(ADCSRA,ADPS0); 
   bitSet(ADCSRA,ADPS1); 
@@ -79,8 +77,7 @@ void setup()
   
   setupTFT();
   
-  vMax[1] = 255;
-  vMin[1] = 0;
+  analogWrite(PWM_SIGNAL, 128);
 }
 
 
@@ -181,11 +178,6 @@ void setupTFT()
   frequencyArea.setFontLetterSpacing(2);
   frequencyArea.setFontColor(COLOR_TEXT, COLOR_BG);
 
-  resetTFT();
-}
-
-void resetTFT()
-{
   tft.fillScreen(COLOR_BG);
   for (byte i = 1; i < 10; i++)
   {
@@ -199,26 +191,28 @@ void resetTFT()
 
 void updateTFT()
 {
+  byte oldBufferIndex = bufferIndex == 0 ? 1 : 0;
   float stepSize[2];
   stepSize[bufferIndex] = (float)WIDTH / (steps[bufferIndex] - 1);
-  stepSize[bufferIndex == 0 ? 1 : 0] = (float)WIDTH / (steps[bufferIndex == 0 ? 1 : 0] - 1);
+  stepSize[oldBufferIndex] = (float)WIDTH / (steps[oldBufferIndex] - 1);
   int x2 = 1;
+  
   for (int x1 = 1; x1 <= (int)max(steps[0], steps[1]); x1++)
   {
     if (x1 < steps[bufferIndex == 0 ? 1 : 0])
     {
       // Remove old graph
-      tft.drawLine((x1 * stepSize[bufferIndex == 0 ? 1 : 0]) - stepSize[bufferIndex == 0 ? 1 : 0], valueBuffer[x1 - 1][bufferIndex == 0 ? 1 : 0] - 1, x1 == floor(steps[bufferIndex == 0 ? 1 : 0] - 1) ? WIDTH : x1 * stepSize[bufferIndex == 0 ? 1 : 0], valueBuffer[x1][bufferIndex == 0 ? 1 : 0] - 1, COLOR_BG);
-      tft.drawLine((x1 * stepSize[bufferIndex == 0 ? 1 : 0]) - stepSize[bufferIndex == 0 ? 1 : 0], valueBuffer[x1 - 1][bufferIndex == 0 ? 1 : 0], x1 == floor(steps[bufferIndex == 0 ? 1 : 0] - 1) ? WIDTH : x1 * stepSize[bufferIndex == 0 ? 1 : 0], valueBuffer[x1][bufferIndex == 0 ? 1 : 0], COLOR_BG);
-      tft.drawLine((x1 * stepSize[bufferIndex == 0 ? 1 : 0]) - stepSize[bufferIndex == 0 ? 1 : 0], valueBuffer[x1 - 1][bufferIndex == 0 ? 1 : 0] + 1, x1 == floor(steps[bufferIndex == 0 ? 1 : 0] - 1) ? WIDTH : x1 * stepSize[bufferIndex == 0 ? 1 : 0], valueBuffer[x1][bufferIndex == 0 ? 1 : 0] + 1, COLOR_BG);
-      
+      tft.drawLine((x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex], valueBuffer[x1 - 1][oldBufferIndex] - 1, x1 == floor(steps[oldBufferIndex] - 1) ? WIDTH : x1 * stepSize[oldBufferIndex], valueBuffer[x1][oldBufferIndex] - 1, COLOR_BG);
+      tft.drawLine((x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex], valueBuffer[x1 - 1][oldBufferIndex], x1 == floor(steps[oldBufferIndex] - 1) ? WIDTH : x1 * stepSize[oldBufferIndex], valueBuffer[x1][oldBufferIndex], COLOR_BG);
+      tft.drawLine((x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex], valueBuffer[x1 - 1][oldBufferIndex] + 1, x1 == floor(steps[oldBufferIndex] - 1) ? WIDTH : x1 * stepSize[oldBufferIndex], valueBuffer[x1][oldBufferIndex] + 1, COLOR_BG);
+
       // Draw vertical division line dynamically
-      for (int i = (x1 * stepSize[bufferIndex == 0 ? 1 : 0]) - stepSize[bufferIndex == 0 ? 1 : 0]; i < x1 * stepSize[bufferIndex == 0 ? 1 : 0]; i++)
+      for (int i = (x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex]; i < x1 * stepSize[oldBufferIndex]; i++)
       {
         if (i % DIV_SIZE == 0 && i != 0)
         {
-          byte s = max(0, min(valueBuffer[x1 - 1][bufferIndex == 0 ? 1 : 0], valueBuffer[x1][bufferIndex == 0 ? 1 : 0]) - 1);
-          byte h = abs(valueBuffer[x1 - 1][bufferIndex == 0 ? 1 : 0] - valueBuffer[x1][bufferIndex == 0 ? 1 : 0]) + 3;
+          byte s = max(0, min(valueBuffer[x1 - 1][oldBufferIndex], valueBuffer[x1][oldBufferIndex]) - 1);
+          byte h = abs(valueBuffer[x1 - 1][oldBufferIndex] - valueBuffer[x1][oldBufferIndex]) + 3;
           if (s + h > 6 * DIV_SIZE)
           {
             h -= s + h - (6 * DIV_SIZE);
@@ -226,26 +220,27 @@ void updateTFT()
           tft.drawFastVLine(i, s, h, COLOR_DIV);
         }
       }
-      
+
       // Draw horizontal division lines dynamically
-      byte s = min(valueBuffer[x1 - 1][bufferIndex == 0 ? 1 : 0], valueBuffer[x1][bufferIndex == 0 ? 1 : 0]);
-      byte d = abs(valueBuffer[x1 - 1][bufferIndex == 0 ? 1 : 0] - valueBuffer[x1][bufferIndex == 0 ? 1 : 0]);
+      byte s = min(valueBuffer[x1 - 1][oldBufferIndex], valueBuffer[x1][oldBufferIndex]);
+      byte d = abs(valueBuffer[x1 - 1][oldBufferIndex] - valueBuffer[x1][oldBufferIndex]);
+
       for (int i = s - 1; i < s + d + 3; i++)
       {
         if (i % DIV_SIZE == 0 && i != 0)
         {
-          tft.drawFastHLine((x1 * stepSize[bufferIndex == 0 ? 1 : 0]) - stepSize[bufferIndex == 0 ? 1 : 0] - 1, i, stepSize[bufferIndex == 0 ? 1 : 0] + 3, COLOR_DIV);
+          tft.drawFastHLine((x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex] - 1, i, stepSize[oldBufferIndex] + 3, COLOR_DIV);
         }
       }
     }
 
-    if ((stepSize[bufferIndex] <= stepSize[bufferIndex == 0 ? 1 : 0] || (int)(x2 * stepSize[bufferIndex]) < (int)(x1 * stepSize[bufferIndex == 0 ? 1 : 0])) && x2 < (int)steps[bufferIndex])
+    if ((stepSize[bufferIndex] <= stepSize[oldBufferIndex] || (int)(x2 * stepSize[bufferIndex]) < (int)(x1 * stepSize[oldBufferIndex])) && x2 < (int)steps[bufferIndex])
     {
       // Draw new graph
       tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], max(valueBuffer[x2 - 1][bufferIndex] - 1, 0), x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], max(valueBuffer[x2][bufferIndex] - 1, 0), digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
       tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], valueBuffer[x2 - 1][bufferIndex], x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], valueBuffer[x2][bufferIndex], digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
       tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], min(valueBuffer[x2 - 1][bufferIndex] + 1, 6 * DIV_SIZE), x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], min(valueBuffer[x2][bufferIndex] + 1, 6 * DIV_SIZE), digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
-      
+
       // Messurements
       if (valueBuffer[x2][bufferIndex] < vMax[0])
       {
@@ -290,22 +285,22 @@ void updateTFT()
   if (vMax[0] != vMax[1])
   {
     vMax[1] = vMax[0];
-    ftoa(tempValue, (float)((6 * DIV_SIZE) - vMax[0]) / (6 * DIV_SIZE) * 5, 2);
+    floatToString(tempValue, (float)((6 * DIV_SIZE) - vMax[0]) / (6 * DIV_SIZE) * 5, 2);
     sprintf(tempString, "Vmax: %sV", tempValue);
     vMaxArea.drawString(tempString, gTextAlignMiddleLeft, gTextEraseFullLine);
   }
   if (vMin[0] != vMin[1])
   {
     vMin[1] = vMin[0];
-    ftoa(tempValue, (float)((6 * DIV_SIZE) - vMin[0]) / (6 * DIV_SIZE) * 5, 2);
+    floatToString(tempValue, (float)((6 * DIV_SIZE) - vMin[0]) / (6 * DIV_SIZE) * 5, 2);
     sprintf(tempString, "Vmin: %sV", tempValue);
     vMinArea.drawString(tempString, gTextAlignMiddleLeft, gTextEraseFullLine);
   }
   if ((timeMessured[0] >= 10000 ? timeMessured[0] / 100 : timeMessured[0]) != (timeMessured[1] >= 10000 ? timeMessured[1] / 100 : timeMessured[1]))
   {
     timeMessured[1] = timeMessured[0];
-    ftoa(tempValue, timeMessured[0] >= 10000 ? (float)timeMessured[0] / 10000 : (float)timeMessured[0] / 10, 2);
-    sprintf(tempString, timeMessured[0] >= 10000 ? "t/Div: %sms" : "%sus", tempValue);
+    floatToString(tempValue, timeMessured[0] >= 10000 ? (float)timeMessured[0] / 10000 : (float)timeMessured[0] / 10, 2);
+    sprintf(tempString, timeMessured[0] >= 10000 ? "t/Div: %sms" : "t/Div: %sus", tempValue);
     timePerDivArea.drawString(tempString, gTextAlignMiddleLeft, gTextEraseFullLine);
   }
   if (frequency[0] != frequency[1])
@@ -314,18 +309,4 @@ void updateTFT()
     sprintf(tempString, "f: %dHz", (int)frequency[0]);
     frequencyArea.drawString(tempString, gTextAlignMiddleLeft, gTextEraseFullLine);
   }
-}
-
-char *ftoa(char *a, double f, int precision)
-{
- long p[] = {0,10,100,1000,10000,100000,1000000,10000000,100000000};
- 
- char *ret = a;
- long heiltal = (long)f;
- itoa(heiltal, a, 10);
- while (*a != '\0') a++;
- *a++ = '.';
- long desimal = abs((long)((f - heiltal) * p[precision]));
- itoa(desimal, a, 10);
- return ret;
 }
