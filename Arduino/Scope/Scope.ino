@@ -13,7 +13,9 @@
 #define ANALOG 14
 #define DIGITAL 6
 #define DIGITAL_MODE 7
-#define PWM_SIGNAL 3
+#define TIME_AXIS 15
+#define TRIGGER_LEVEL 16
+#define PWM_SIGNAL 5
 
 // Display
 #define WIDTH 320
@@ -43,6 +45,8 @@ byte vMin[2];
 unsigned long timeMessured[2];
 float frequency[2];
 float steps[2];
+byte triggerLevel[2];
+int timeAxis;
 
 // indexes
 int valueIndex = 0;
@@ -52,8 +56,6 @@ boolean digitalMode = true;
 int digitalDelay;
 
 // temp
-int timeAxis = 0;
-byte triggerLevel = 172;
 bool triggerEnabled = true;
 bool triggerMode = true; // true = raising edge, false = falling edge
 bool triggered = false;
@@ -68,6 +70,8 @@ void setup()
   pinMode(ANALOG, INPUT);
   pinMode(DIGITAL, INPUT);
   pinMode(DIGITAL_MODE, INPUT);
+  pinMode(TIME_AXIS, INPUT);
+  pinMode(TRIGGER_LEVEL, INPUT);
   pinMode(PWM_SIGNAL, OUTPUT);
     
   // Boost ADC conversion time from 9.6kS/s vs. 76.9kS/s (without overhead)
@@ -85,14 +89,19 @@ void loop()
 {
   if (valueIndex == 0)
   {
+    // With the ADC conversation boost the first value of a ADC reading can be wrong.
+    // Therefore we reqeust 2 values and only use the second one.
+    
     // Digital Inputs (Switches)
     digitalMode = digitalRead(DIGITAL_MODE) == HIGH ? true : false;
     //triggerEnabled = digitalRead(TRIGGER_ENABLED) == HIGH ? true : false;
     //triggerMode = digitalRead(TRIGGER_MODE) == HIGH ? true : false;
     
     // Analog Inputs (Potentiometers)
-    //timeAxis = analogRead(TIME_AXIS);
-    //triggerLevel = (6 * DIV_SIZE) - ((float)analogRead(TRIGGER_LEVEL) / 1024 * 6 * DIV_SIZE);
+    analogRead(TIME_AXIS);
+    timeAxis = analogRead(TIME_AXIS);
+    analogRead(TRIGGER_LEVEL);
+    triggerLevel[0] = (6 * DIV_SIZE) - ((float)analogRead(TRIGGER_LEVEL) / 1024 * 6 * DIV_SIZE);
     
     // Switch buffer
     bufferIndex = bufferIndex == 0 ? 1 : 0;
@@ -128,10 +137,15 @@ void loop()
       delayMicroseconds(digitalDelay);
     }
     else
-    {     
+    {
+      // We only need to reqeust a scrap value for the very first value and not for every one.
+      if (valueIndex == 0)
+      {
+        analogRead(ANALOG);
+      }
       valueBuffer[valueIndex][bufferIndex] = (6 * DIV_SIZE) - ((unsigned long)analogRead(ANALOG) * 6 * DIV_SIZE / 1024);
 
-      if ((triggerEnabled && !triggered && valueIndex > 0) && ((triggerMode && valueBuffer[valueIndex - 1][bufferIndex] > triggerLevel && valueBuffer[valueIndex][bufferIndex] <= triggerLevel) || !triggerMode && valueBuffer[valueIndex - 1][bufferIndex] < triggerLevel && valueBuffer[valueIndex][bufferIndex] >= triggerLevel))
+      if ((triggerEnabled && !triggered && valueIndex > 0) && ((triggerMode && valueBuffer[valueIndex - 1][bufferIndex] > triggerLevel[0] && valueBuffer[valueIndex][bufferIndex] <= triggerLevel[0]) || !triggerMode && valueBuffer[valueIndex - 1][bufferIndex] < triggerLevel[0] && valueBuffer[valueIndex][bufferIndex] >= triggerLevel[0]))
       {
         // We triggered!
         // Use current value as first value
@@ -195,19 +209,29 @@ void updateTFT()
   float stepSize[2];
   stepSize[bufferIndex] = (float)WIDTH / (steps[bufferIndex] - 1);
   stepSize[oldBufferIndex] = (float)WIDTH / (steps[oldBufferIndex] - 1);
-  int x2 = 1;
-  
+  int x2 = 1; 
   for (int x1 = 1; x1 <= (int)max(steps[0], steps[1]); x1++)
   {
     if (x1 < steps[bufferIndex == 0 ? 1 : 0])
     {
       // Remove old graph
-      tft.drawLine((x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex], valueBuffer[x1 - 1][oldBufferIndex] - 1, x1 == floor(steps[oldBufferIndex] - 1) ? WIDTH : x1 * stepSize[oldBufferIndex], valueBuffer[x1][oldBufferIndex] - 1, COLOR_BG);
       tft.drawLine((x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex], valueBuffer[x1 - 1][oldBufferIndex], x1 == floor(steps[oldBufferIndex] - 1) ? WIDTH : x1 * stepSize[oldBufferIndex], valueBuffer[x1][oldBufferIndex], COLOR_BG);
-      tft.drawLine((x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex], valueBuffer[x1 - 1][oldBufferIndex] + 1, x1 == floor(steps[oldBufferIndex] - 1) ? WIDTH : x1 * stepSize[oldBufferIndex], valueBuffer[x1][oldBufferIndex] + 1, COLOR_BG);
+      if (stepSize[oldBufferIndex] / max(abs(valueBuffer[x1 - 1][oldBufferIndex] - valueBuffer[x1][oldBufferIndex]), 1) >= 1)
+      {  
+        tft.drawLine((x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex], valueBuffer[x1 - 1][oldBufferIndex] - 1, x1 == floor(steps[oldBufferIndex] - 1) ? WIDTH : x1 * stepSize[oldBufferIndex], valueBuffer[x1][oldBufferIndex] - 1, COLOR_BG);
+        tft.drawLine((x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex], valueBuffer[x1 - 1][oldBufferIndex] + 1, x1 == floor(steps[oldBufferIndex] - 1) ? WIDTH : x1 * stepSize[oldBufferIndex], valueBuffer[x1][oldBufferIndex] + 1, COLOR_BG);
+      }
+      else
+      {
+        tft.drawLine((x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex] - 1, valueBuffer[x1 - 1][oldBufferIndex], x1 == floor(steps[oldBufferIndex] - 1) ? WIDTH : x1 * stepSize[oldBufferIndex] - 1, valueBuffer[x1][oldBufferIndex], COLOR_BG);
+        tft.drawLine((x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex] + 1, valueBuffer[x1 - 1][oldBufferIndex], x1 == floor(steps[oldBufferIndex] - 1) ? WIDTH : x1 * stepSize[oldBufferIndex] + 1, valueBuffer[x1][oldBufferIndex], COLOR_BG);
+      }
+      
+      // Remove old trigger line
+      tft.drawFastHLine((x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex], triggerLevel[1], stepSize[oldBufferIndex] + 1, triggerLevel[1] % DIV_SIZE == 0 ? COLOR_DIV : COLOR_BG);
 
       // Draw vertical division line dynamically
-      for (int i = (x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex]; i < x1 * stepSize[oldBufferIndex]; i++)
+      for (int i = (x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex] - 1; i < x1 * stepSize[oldBufferIndex] + 1; i++)
       {
         if (i % DIV_SIZE == 0 && i != 0)
         {
@@ -218,29 +242,41 @@ void updateTFT()
             h -= s + h - (6 * DIV_SIZE);
           }
           tft.drawFastVLine(i, s, h, COLOR_DIV);
+          tft.drawPixel(i, triggerLevel[1], COLOR_DIV);
         }
       }
 
       // Draw horizontal division lines dynamically
       byte s = min(valueBuffer[x1 - 1][oldBufferIndex], valueBuffer[x1][oldBufferIndex]);
-      byte d = abs(valueBuffer[x1 - 1][oldBufferIndex] - valueBuffer[x1][oldBufferIndex]);
-
-      for (int i = s - 1; i < s + d + 3; i++)
+      byte d = abs(valueBuffer[x1 - 1][oldBufferIndex] - valueBuffer[x1][oldBufferIndex]);    
+      
+      for (byte i = s - 1; i < s + d + 3; i++)
       {
         if (i % DIV_SIZE == 0 && i != 0)
         {
-          tft.drawFastHLine((x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex] - 1, i, stepSize[oldBufferIndex] + 3, COLOR_DIV);
+          tft.drawFastHLine(max((x1 * stepSize[oldBufferIndex]) - stepSize[oldBufferIndex] - 1, 0), i, stepSize[oldBufferIndex] + 4, COLOR_DIV);
         }
       }
     }
 
-    if ((stepSize[bufferIndex] <= stepSize[oldBufferIndex] || (int)(x2 * stepSize[bufferIndex]) < (int)(x1 * stepSize[oldBufferIndex])) && x2 < (int)steps[bufferIndex])
+    if ((stepSize[bufferIndex] < stepSize[oldBufferIndex] || (int)(x2 * stepSize[bufferIndex]) < (int)(x1 * stepSize[oldBufferIndex])) && x2 < (int)steps[bufferIndex])
     {
+      // Draw new tigger line
+      tft.drawFastHLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], triggerLevel[0], stepSize[bufferIndex] + 1, COLOR_DIGITAL);
+      
       // Draw new graph
-      tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], max(valueBuffer[x2 - 1][bufferIndex] - 1, 0), x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], max(valueBuffer[x2][bufferIndex] - 1, 0), digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
       tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], valueBuffer[x2 - 1][bufferIndex], x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], valueBuffer[x2][bufferIndex], digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
-      tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], min(valueBuffer[x2 - 1][bufferIndex] + 1, 6 * DIV_SIZE), x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], min(valueBuffer[x2][bufferIndex] + 1, 6 * DIV_SIZE), digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
-
+      if (stepSize[bufferIndex] / max(abs(valueBuffer[x2 - 1][bufferIndex] - valueBuffer[x2][bufferIndex]), 1) >= 1)
+      {      
+        tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], max(valueBuffer[x2 - 1][bufferIndex] - 1, 0), x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], max(valueBuffer[x2][bufferIndex] - 1, 0), digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
+        tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex], min(valueBuffer[x2 - 1][bufferIndex] + 1, 6 * DIV_SIZE), x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex], min(valueBuffer[x2][bufferIndex] + 1, 6 * DIV_SIZE), digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
+      }
+      else
+      {
+        tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex] - 1, valueBuffer[x2 - 1][bufferIndex], x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex] - 1, valueBuffer[x2][bufferIndex], digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
+        tft.drawLine((x2 * stepSize[bufferIndex]) - stepSize[bufferIndex] + 1, valueBuffer[x2 - 1][bufferIndex], x2 == floor(steps[bufferIndex] - 1) ? WIDTH : x2 * stepSize[bufferIndex] + 1, valueBuffer[x2][bufferIndex], digitalMode ? COLOR_DIGITAL : COLOR_ANALOG);
+      }
+      
       // Messurements
       if (valueBuffer[x2][bufferIndex] < vMax[0])
       {
@@ -309,4 +345,6 @@ void updateTFT()
     sprintf(tempString, "f: %dHz", (int)frequency[0]);
     frequencyArea.drawString(tempString, gTextAlignMiddleLeft, gTextEraseFullLine);
   }
+  
+  triggerLevel[1] = triggerLevel[0];
 }
