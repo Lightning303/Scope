@@ -1,3 +1,6 @@
 [submodule "Libraries/ILI9341_due"]
 	path = Libraries/ILI9341_due
 	url = https://github.com/marekburiak/ILI9341_due.git
+[submodule "Libraries/SparkFun-Eagle-Libraries"]
+	path = Libraries/SparkFun-Eagle-Libraries
+	url = https://github.com/sparkfun/SparkFun-Eagle-Libraries.git
